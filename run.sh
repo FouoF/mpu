@@ -3,7 +3,11 @@ set -eo pipefail
 
 MODULE_NAME="mpu"
 MODULE_FILE="mpu.ko"
-MODULE_PATH="$(pwd)/${MODULE_FILE}"  # 使用绝对路径
+# 优先使用镜像内预编译 build/<kver>/mpu.ko（由 Dockerfile 多阶段构建产生），仅与 uname -r 精确匹配
+KVER="$(uname -r)"
+PREBUILT="$(pwd)/build/${KVER}/mpu.ko"
+[[ -f "$PREBUILT" ]] || PREBUILT=""
+MODULE_PATH="$(pwd)/${MODULE_FILE}"
 
 # 彩色输出定义
 RED='\033[0;31m'
@@ -14,6 +18,7 @@ NC='\033[0m' # No Color
 usage() {
     echo "Usage: $0 [command]"
     echo "Commands:"
+    echo "  build      - Build mpu.ko only (no install)"
     echo "  install    - Install kernel module"
     echo "  uninstall  - Uninstall kernel module"
     echo "Environment:"
@@ -141,17 +146,28 @@ setup_modprobe_config() {
 }
 
 handle_install() {
-    install_
+    local use_prebuilt=false
+    if [[ -f "$PREBUILT" ]]; then
+        use_prebuilt=true
+        echo -e "${GREEN}Using prebuilt module for $(uname -r)${NC}"
+    fi
+
+    if ! "$use_prebuilt"; then
+        install_
+    else
+        apt-get update -qq && apt-get install -y -q kmod || true
+    fi
+
     local replace="${REPLACE:-false}"
-    local auto_load="${AUTO_LOAD:-true}"  # 新增自动加载选项
-    local module_options="${MODULE_OPTIONS:-}"  # 新增模块选项
+    local auto_load="${AUTO_LOAD:-true}"
+    local module_options="${MODULE_OPTIONS:-}"
     local is_loaded=false
+    is_module_loaded && is_loaded=true
 
     if is_module_loaded; then
-      is_loaded=true
-      echo -e "Module status: ${GREEN}Loaded${NC}"
+        echo -e "Module status: ${GREEN}Loaded${NC}"
     else
-      echo -e "Module status: ${YELLOW}Not loaded${NC}"
+        echo -e "Module status: ${YELLOW}Not loaded${NC}"
     fi
 
     case "${replace}" in
@@ -160,12 +176,24 @@ handle_install() {
                 echo -e "${YELLOW}REPLACE mode: Reinstalling module...${NC}"
                 uninstall_module || return $?
             fi
-            build_ko
+            if "$use_prebuilt"; then
+                MODULE_FILE="$PREBUILT"
+            else
+                build_ko
+                MODULE_FILE="mpu.ko"
+            fi
+            check_module_file
             install_module
             ;;
         false)
             if ! "${is_loaded}"; then
-                build_ko
+                if "$use_prebuilt"; then
+                    MODULE_FILE="$PREBUILT"
+                else
+                    build_ko
+                    MODULE_FILE="mpu.ko"
+                fi
+                check_module_file
                 install_module
             else
                 echo -e "${GREEN}Module already loaded and REPLACE=false. Skipping.${NC}"
@@ -184,6 +212,9 @@ handle_install() {
 }
 
 case "$1" in
+    build)
+        build_ko
+        ;;
     install)
         handle_install
         ;;

@@ -1,0 +1,4 @@
+# Ubuntu 20.04 可用的内核版本列表，每行一个，用于在 build-20 阶段安装 headers 并构建 mpu.ko
+# 请填写该发行版仓库中实际可用的 linux-headers-<version> 版本号（以 # 开头的行会被忽略）
+5.4.0-99-generic
+5.8.0-43-generic

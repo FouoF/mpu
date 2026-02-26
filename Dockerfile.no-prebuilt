@@ -1,0 +1,5 @@
+# 无预编译：仅拷贝源码，运行时由 run.sh install 按当前内核即时编译（构建更快）
+FROM ubuntu:22.04
+WORKDIR /mpu
+COPY . /mpu
+CMD ["/bin/bash", "-c", "bash run.sh install && sleep infinity"]
